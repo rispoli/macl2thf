@@ -1,6 +1,7 @@
 (module macl2leoii scheme
         (provide translate-file pretty-print-leoii)
 
+        (define *include-file* "ck.thf")
         (define *atoms* '())
 
         (require parser-tools/yacc
@@ -12,7 +13,7 @@
                  scheme/match)
 
         (define-tokens value-tokens (ATOM))
-        (define-empty-tokens op-tokens (EOF LPAREN RPAREN NOT AMPERAMPER BARBAR MINUSGREATER EQUALSGREATER DOT))
+        (define-empty-tokens op-tokens (EOF LPAREN RPAREN NOT BARBAR AMPERAMPER MINUSGREATER SMALLERMINUSGREATER EQUALSGREATER DOT))
 
         (define-lex-abbrevs
           (comment (:or (:: "//" (:* (:~ #\newline)) #\newline) (:: "/*" (complement (:: any-string "*/" any-string)) "*/"))) ; C style
@@ -28,15 +29,16 @@
             ("(" 'LPAREN)
             (")" 'RPAREN)
             ("not" 'NOT)
-            ("&&" 'AMPERAMPER)
             ("||" 'BARBAR)
+            ("&&" 'AMPERAMPER)
             ("->" 'MINUSGREATER)
+            ("<->" 'SMALLERMINUSGREATER)
             ("=>" 'EQUALSGREATER)
             ("." 'DOT)
             ((:: (:+ lower-letter) (:* (:or lower-letter upper-letter "_" digit))) (token-ATOM (string->symbol lexeme)))))
 
         (define dslp
-          (lambda (source-name selection-function)
+          (lambda (source-name)
             (parser
               (src-pos)
               (start start)
@@ -52,7 +54,8 @@
                          (- (position-offset end-pos)
                             (position-offset start-pos)))))
 
-              (precs (right MINUSGREATER)
+              (precs (left SMALLERMINUSGREATER)
+                     (right MINUSGREATER)
                      (left EQUALSGREATER)
                      (left BARBAR)
                      (left AMPERAMPER)
@@ -62,17 +65,12 @@
                 (start (() #f)
                        ((expr-list) (reverse $1)))
                 (expr ((simple-expr) $1)
-                      ((NOT expr) (let ((x (gensym "X")))
-                                    `(lambda ,x (not (app ,$2 ,x)))))
-                      ((expr AMPERAMPER expr) (let ((x (gensym "X")))
-                                                `(lambda ,x (and (app ,$1 ,x) (app ,$3 ,x)))))
-                      ((expr BARBAR expr) (let ((x (gensym "X")))
-                                            `(lambda ,x (or (app ,$1 ,x) (app ,$3 ,x)))))
-                      ((expr MINUSGREATER expr) (let ((x (gensym "X")))
-                                                  `(lambda ,x (or (not (app ,$1 ,x)) (app ,$3 ,x)))))
-                      ((expr EQUALSGREATER expr) (let ((x (gensym "X"))
-                                                       (w (gensym "W")))
-                                                   `(lambda ,x (forall ,w (implies (app (app ,selection-function ,x ,$1) ,w) (app ,$3 ,w)))))))
+                      ((NOT expr) `(mnot ,$2))
+                      ((expr BARBAR expr) `(mor ,$1 ,$3))
+                      ((expr AMPERAMPER expr) `(mand ,$1 ,$3))
+                      ((expr MINUSGREATER expr) `(mimpl ,$1 ,$3))
+                      ((expr SMALLERMINUSGREATER expr) `(miff ,$1 ,$3))
+                      ((expr EQUALSGREATER expr) `(mcond ,$1 ,$3)))
                 (expr-list ((expr-list DOT expr) (cons `(formula ,$3) $1))
                            ((expr) (list `(formula ,$1)))
                            ((expr-list DOT) $1))
@@ -82,16 +80,16 @@
                              ((LPAREN expr RPAREN) $2))))))
 
         (define translate
-          (lambda (s selection-function #:src-name (src-name "current-input-port"))
+          (lambda (s #:src-name (src-name "current-input-port"))
             (let ((ois (open-input-string s)) (statements '()))
               (port-count-lines! ois)
-              (list ((dslp src-name selection-function) (lambda () (dsll ois))) (reverse (remove-duplicates *atoms*)))))) ; sort instead of reverse?
+              (list ((dslp src-name) (lambda () (dsll ois))) (sort (map symbol->string (remove-duplicates *atoms*)) string<?)))))
 
         (define translate-file
-          (lambda (path selection-function)
+          (lambda (path)
             (call-with-input-file path
                                   (lambda (in)
-                                    (translate (port->string in) selection-function #:src-name path)))))
+                                    (translate (port->string in) #:src-name path)))))
 
         (define counter
           (let ((c 0))
@@ -106,29 +104,23 @@
               ((number? code) (number->string code))
               (else
                 (case (car code)
-                  ((and) (format "( ~a & ~a )" (pretty-print-leoii (list-ref code 1)) (pretty-print-leoii (list-ref code 2))))
-                  ((app) (format "( ~a )" (string-join (map (lambda (e) (pretty-print-leoii e)) (cdr code)) " @ ")))
-                  ((forall) (format "( ! [~a: $i] : ~a )" (list-ref code 1) (pretty-print-leoii (list-ref code 2))))
-                  ((formula) (format "thf(f~a, conjecture, ( ~a ))." (counter) (pretty-print-leoii (list-ref code 1))))
-                  ((implies) (format "( ~a => ~a )" (pretty-print-leoii (list-ref code 1)) (pretty-print-leoii (list-ref code 2))))
-                  ((lambda) (format "( ^ [~a: $i] : ~a )" (list-ref code 1) (pretty-print-leoii (list-ref code 2))))
-                  ((not) (format "~~ ~a" (pretty-print-leoii (list-ref code 1))))
-                  ((or) (format "( ~a | ~a )" (pretty-print-leoii (list-ref code 1)) (pretty-print-leoii (list-ref code 2)))))))))
+                  ((formula) (format "thf(f~a, conjecture, ( mvalid @ ~a ))." (counter) (pretty-print-leoii (list-ref code 1))))
+                  (else (format "( ~a @ ~a )" (car code) (string-join (map (lambda (e) (pretty-print-leoii e)) (cdr code)) " @ "))))))))
 
         (define main
-          (let ((selection-function (make-parameter 'f)))
+          (let ((include-file (make-parameter *include-file*)))
             (command-line
               #:once-each
-              (("-f" "--selection-function ") sf
-                                              "Selection function: defaults to 'f'"
-                                              (selection-function sf))
+              (("-i" "--include-file ") i
+                                        "File to include"
+                                        (include-file i))
 
               #:args (filename)
-              (list filename (selection-function)))))
+              (list filename (include-file)))))
 
-        (match-let* (((list filename selection-function) main) ((list code atoms) (translate-file filename selection-function)))
-                    (display (string-join (map (lambda (e) (format "thf(~a, type, ( ~a: $i > $o ))." e e)) atoms) "\n"))
+        (match-let* (((list filename include-file) main) ((list code atoms) (translate-file filename)))
+                    (display (format "include('~a')." include-file))
                     (newline)
-                    (display (format "thf(~a, type, ( ~a: $i > ( $i > $o ) > ( $i > $o ) ))." selection-function selection-function))
+                    (display (string-join (map (lambda (e) (format "thf(~a, type, ( ~a: $i > $o ))." e e)) atoms) "\n"))
                     (newline)
                     (display (string-join (map (lambda (e) (pretty-print-leoii e)) code) "\n"))))

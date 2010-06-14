@@ -1,0 +1,59 @@
+%%%%%%%%%%%%%%%%%%%%%%%
+% CONDITONAL LOGIC CK %
+%%%%%%%%%%%%%%%%%%%%%%%
+
+%---mfalse corresponds to emptyset
+thf(mfalse_decl, type, ( mfalse: $i > $o )).
+
+thf(mfalse, definition, ( mfalse := ( ^ [X: $i] : $false ) )).
+
+%---mtrue corresponds to the universal set (of type $i)
+thf(mtrue_decl, type, ( mtrue: $i > $o )).
+
+thf(mtrue, definition, ( mtrue := ( ^ [X: $i] : $true ) )).
+
+%---mnot corresponds to set complement
+thf(mnot_decl, type, ( mnot: ( $i > $o ) > $i > $o )).
+
+thf(mnot, definition, ( mnot := ( ^ [X: $i > $o, U: $i] : ( ~ ( X @ U ) ) ) )).
+
+%---mor corresponds to set union
+thf(mor_decl, type, ( mor: ( $i > $o ) > ( $i > $o ) > $i > $o )).
+
+thf(mor, definition, ( mor := ( ^ [X: $i > $o, Y: $i > $o, U: $i] : ( ( X @ U ) | ( Y @ U ) ) ) )).
+
+%---mand corresponds to set intersection
+thf(mand_decl, type, ( mand: ( $i > $o ) > ( $i > $o ) > $i > $o )).
+
+thf(mand, definition, ( mand := ( ^ [X: $i > $o, Y: $i > $o, U: $i] : ( ( X @ U ) & ( Y @ U ) ) ) )).
+
+%---mimpl is defined via mnot and mor
+thf(mimpl_decl, type, ( mimpl: ( $i > $o ) > ( $i > $o ) > $i > $o )).
+
+thf(mimpl, definition, ( mimpl := ( ^ [U: $i > $o, V: $i > $o] : ( mor @ ( mnot @ U ) @ V ) ) )).
+
+%---miff is defined via mand and mimpl
+thf(miff_decl, type, ( miff: ( $i > $o ) > ( $i > $o ) > $i > $o )).
+
+thf(miff, definition, ( miff := ( ^ [U: $i > $o, V: $i > $o] : ( mand @ ( mimpl @ U @ V ) @ ( mimpl @ V @ U ) ) ) )).
+
+%---selection function f(w,[A]) \subseteq W
+thf(f_decl, type, ( f: $i > ( $i > $o ) > ( $i > $o ) )).
+
+%---mcond is a conditional defined in terms of the selection function
+thf(mcond_decl, type, ( mcond: ( $i > $o ) > ( $i > $o ) > $i > $o )).
+
+thf(mcond, definition, ( mcond := ( ^ [U: $i > $o, V: $i > $o, X: $i] : ( ! [W: $i] : ( ( ~ ( ( f @ X @ U ) @ W ) ) | ( V @ W ) ) ) ) )).
+
+%---Validity in a conditional logic can be encoded as
+thf(mvalid_decl, type, ( mvalid: ( $i > $o ) > $o )).
+
+thf(mvalid, definition, ( mvalid := ( ^ [P: $i > $o] : ( ! [W: $i] : ( P @ W ) ) ) )).
+
+
+%%%%%%%%%%
+% AXIOMS %
+%%%%%%%%%%
+
+%---Normality condition
+thf(normality, axiom, ( ! [A: ( $i > $o ), B: ( $i > $o ), C: ( $i > $o )] : ( ( mvalid @ ( miff @ A @ B ) ) => ( mvalid @ ( miff @ ( mcond @ A @ C ) @ ( mcond @ B @ C ) ) ) ) )).
