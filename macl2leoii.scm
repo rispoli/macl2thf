@@ -12,8 +12,8 @@
                  scheme/cmdline
                  scheme/match)
 
-        (define-tokens value-tokens (ATOM))
-        (define-empty-tokens op-tokens (EOF LPAREN RPAREN NOT BARBAR AMPERAMPER MINUSGREATER SMALLERMINUSGREATER EQUALSGREATER DOT))
+        (define-tokens value-tokens (ATOM MODE))
+        (define-empty-tokens op-tokens (EOF LPAREN RPAREN NOT BARBAR AMPERAMPER MINUSGREATER SMALLERMINUSGREATER EQUALSGREATER LIST_OF_FORMULAE DOT END_OF_LIST))
 
         (define-lex-abbrevs
           (comment (:or (:: "//" (:* (:~ #\newline)) #\newline) (:: "/*" (complement (:: any-string "*/" any-string)) "*/"))) ; C style
@@ -34,7 +34,11 @@
             ("->" 'MINUSGREATER)
             ("<->" 'SMALLERMINUSGREATER)
             ("=>" 'EQUALSGREATER)
+            ("list_of_formulae" 'LIST_OF_FORMULAE)
+            ("axiom" (token-MODE 'axiom))
+            ("conjecture" (token-MODE 'conjecture))
             ("." 'DOT)
+            ("end_of_list" 'END_OF_LIST)
             ((:: (:+ lower-letter) (:* (:or lower-letter upper-letter "_" digit))) (token-ATOM (string->symbol lexeme)))))
 
         (define dslp
@@ -42,7 +46,7 @@
             (parser
               (src-pos)
               (start start)
-              (end EOF)
+              (end EOF END_OF_LIST)
               (tokens value-tokens op-tokens)
               (error (lambda (tok-ok? tok-name tok-value start-pos end-pos)
                        (raise-read-error
@@ -63,7 +67,7 @@
 
               (grammar
                 (start (() #f)
-                       ((expr-list) (reverse $1)))
+                       ((toplevel) $1))
                 (expr ((simple-expr) $1)
                       ((NOT expr) `(mnot ,$2))
                       ((expr BARBAR expr) `(mor ,$1 ,$3))
@@ -74,6 +78,8 @@
                 (expr-list ((expr-list DOT expr) (cons `(formula ,$3) $1))
                            ((expr) (list `(formula ,$1)))
                            ((expr-list DOT) $1))
+                (mode ((MODE) $1))
+                (toplevel ((LIST_OF_FORMULAE LPAREN mode RPAREN expr-list) `(,$3 ,(reverse $5))))
                 (simple-expr ((ATOM) (begin
                                        (set! *atoms* (cons $1 *atoms*))
                                        $1))
@@ -83,7 +89,14 @@
           (lambda (s #:src-name (src-name "current-input-port"))
             (let ((ois (open-input-string s)) (statements '()))
               (port-count-lines! ois)
-              (list ((dslp src-name) (lambda () (dsll ois))) (sort (map symbol->string (remove-duplicates *atoms*)) string<?)))))
+              (letrec ((loop
+                         (lambda ()
+                           (let ((r ((dslp src-name) (lambda () (dsll ois)))))
+                             (when r
+                               (set! statements (cons r statements))
+                               (loop))))))
+                (loop))
+              (list (reverse statements) (sort (map symbol->string (remove-duplicates *atoms*)) string<?)))))
 
         (define translate-file
           (lambda (path)
@@ -98,13 +111,13 @@
               c)))
 
         (define pretty-print-leoii
-          (lambda (code)
+          (lambda (code #:mode (mode ""))
             (cond
               ((symbol? code) (symbol->string code))
               ((number? code) (number->string code))
               (else
                 (case (car code)
-                  ((formula) (format "thf(f~a, conjecture, ( mvalid @ ~a ))." (counter) (pretty-print-leoii (list-ref code 1))))
+                  ((formula) (format "thf(f~a, ~a, ( mvalid @ ~a ))." (counter) mode (pretty-print-leoii (list-ref code 1))))
                   (else (format "( ~a @ ~a )" (car code) (string-join (map (lambda (e) (pretty-print-leoii e)) (cdr code)) " @ "))))))))
 
         (define main
@@ -114,13 +127,11 @@
               (("-i" "--include-file ") i
                                         "File to include"
                                         (include-file i))
-
               #:args (filename)
               (list filename (include-file)))))
 
         (match-let* (((list filename include-file) main) ((list code atoms) (translate-file filename)))
-                    (display (format "include('~a')." include-file))
-                    (newline)
+                    (display (format "include('~a').~n~n" include-file))
                     (display (string-join (map (lambda (e) (format "thf(~a, type, ( ~a: $i > $o ))." e e)) atoms) "\n"))
-                    (newline)
-                    (display (string-join (map (lambda (e) (pretty-print-leoii e)) code) "\n"))))
+                    (newline)(newline)
+                    (display (string-join (flatten (map (lambda (e) (map (lambda (f) (pretty-print-leoii f #:mode (car e))) (cadr e))) code)) "\n"))))
