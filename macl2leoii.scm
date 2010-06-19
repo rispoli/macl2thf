@@ -77,7 +77,8 @@
                       ((expr EQUALSGREATER expr) `(mcond ,$1 ,$3)))
                 (expr-list ((expr-list DOT expr) (cons `(formula ,$3) $1))
                            ((expr) (list `(formula ,$1)))
-                           ((expr-list DOT) $1))
+                           ((expr-list DOT) $1)
+                           (() '()))
                 (mode ((MODE) $1))
                 (toplevel ((LIST_OF_FORMULAE LPAREN mode RPAREN expr-list) `(,$3 ,(reverse $5))))
                 (simple-expr ((ATOM) (begin
