@@ -1,5 +1,5 @@
-(module macl2leoii scheme
-        (provide translate-file pretty-print-leoii)
+(module macl2thf scheme
+        (provide translate-file pretty-print-thf)
 
         (define *include-file* "ck.thf")
         (define *atoms* '())
@@ -111,15 +111,15 @@
               (set! c (+ c 1))
               c)))
 
-        (define pretty-print-leoii
+        (define pretty-print-thf
           (lambda (code #:mode (mode ""))
             (cond
               ((symbol? code) (symbol->string code))
               ((number? code) (number->string code))
               (else
                 (case (car code)
-                  ((formula) (format "thf(f~a, ~a, ( mvalid @ ~a ))." (counter) mode (pretty-print-leoii (list-ref code 1))))
-                  (else (format "( ~a @ ~a )" (car code) (string-join (map (lambda (e) (pretty-print-leoii e)) (cdr code)) " @ "))))))))
+                  ((formula) (format "thf(f~a, ~a, ( mvalid @ ~a ))." (counter) mode (pretty-print-thf (list-ref code 1))))
+                  (else (format "( ~a @ ~a )" (car code) (string-join (map (lambda (e) (pretty-print-thf e)) (cdr code)) " @ "))))))))
 
         (define main
           (let ((include-file (make-parameter *include-file*)))
@@ -135,4 +135,4 @@
                     (display (format "include('~a').~n~n" include-file))
                     (display (string-join (map (lambda (e) (format "thf(~a, type, ( ~a: $i > $o ))." e e)) atoms) "\n"))
                     (newline)(newline)
-                    (display (string-join (flatten (map (lambda (e) (map (lambda (f) (pretty-print-leoii f #:mode (car e))) (cadr e))) code)) "\n"))))
+                    (display (string-join (flatten (map (lambda (e) (map (lambda (f) (pretty-print-thf f #:mode (car e))) (cadr e))) code)) "\n"))))

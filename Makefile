@@ -1,12 +1,12 @@
 CC = /usr/bin/mzc
 
-all: macl2leoii
+all: macl2thf macl2thf_dist
 
-macl2leoii: macl2leoii.scm
-	$(CC) --exe macl2leoii macl2leoii.scm
+macl2thf: macl2thf.scm
+	$(CC) --exe macl2thf macl2thf.scm
 
-macl2leoii_dist: macl2leoii
-	$(CC) --exe-dir macl2leoii_dist macl2leoii
+macl2thf_dist: macl2thf
+	$(CC) --exe-dir macl2thf_dist macl2thf
 
 clean:
-	rm -r macl2leoii macl2leoii_dist
+	rm -r macl2thf macl2thf_dist
